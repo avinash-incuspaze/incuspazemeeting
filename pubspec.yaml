@@ -1,0 +1,61 @@
+name: incuspaze_meeting
+description: "Dedicated Meeting room booking Module"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  get: ^4.7.3
+
+  # QR Code Scanner
+  mobile_scanner: ^5.2.3
+
+  # QR Code Generator
+  qr_flutter: ^4.1.0
+
+  # Date Formatting
+  intl: ^0.20.2
+
+  # HTTP Client
+  http: ^1.2.0
+
+  # Local Storage
+  shared_preferences: ^2.2.2
+
+  # Icons
+  cupertino_icons: ^1.0.8
+
+  flutter_launcher_icons: ^0.14.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^5.0.0
+  flutter_native_splash: ^2.4.1
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/launcher_Icon.png
+
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/launcher_Icon.png"
+  remove_alpha_ios: true
+
+flutter_native_splash:
+  color: "#FFFFFF"
+  image: "assets/launcher_Icon.png"
+  android: true
+  ios: true

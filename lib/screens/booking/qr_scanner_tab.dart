@@ -1,0 +1,366 @@
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
+import '../../app/controllers/auth_controller.dart';
+import '../../app/data/services/api_service.dart';
+import '../../widgets/check_in_response_dialog.dart';
+
+class QRScannerTab extends StatefulWidget {
+  final String meetingRoomId;
+
+  const QRScannerTab({
+    super.key,
+    required this.meetingRoomId,
+  });
+
+  @override
+  State<QRScannerTab> createState() => _QRScannerTabState();
+}
+
+class _QRScannerTabState extends State<QRScannerTab> {
+  MobileScannerController? _scannerController;
+  bool _isScanning = false;
+  bool _isProcessing = false;
+  final TextEditingController _manualCodeController = TextEditingController();
+  final ApiService _apiService = Get.find<ApiService>();
+
+  @override
+  void dispose() {
+    _stopScanning();
+    _manualCodeController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _startScanning() async {
+    try {
+      setState(() {
+        _isScanning = true;
+        _scannerController = MobileScannerController(
+          facing: CameraFacing.front,
+          detectionSpeed: DetectionSpeed.noDuplicates,
+        );
+      });
+      // Start the scanner
+      await _scannerController?.start();
+    } catch (e) {
+      setState(() {
+        _isScanning = false;
+        _scannerController?.dispose();
+        _scannerController = null;
+      });
+      
+      String errorMessage = 'Failed to start camera';
+      if (e.toString().contains('MissingPluginException')) {
+        errorMessage = 'Camera plugin not available. Please stop the app and do a FULL REBUILD (not hot restart).';
+      } else {
+        errorMessage = 'Failed to start camera: ${e.toString()}';
+      }
+      
+      Get.snackbar(
+        'Camera Error',
+        errorMessage,
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 5),
+      );
+    }
+  }
+
+  Future<void> _stopScanning() async {
+    try {
+      await _scannerController?.stop();
+    } catch (e) {
+      // Ignore errors when stopping
+    } finally {
+      setState(() {
+        _isScanning = false;
+        _scannerController?.dispose();
+        _scannerController = null;
+      });
+    }
+  }
+
+  Future<void> _handleQRCode(String code) async {
+    if (_isProcessing) return; // Prevent multiple calls
+    
+    _stopScanning();
+    setState(() {
+      _isProcessing = true;
+    });
+
+    try {
+      final authController = Get.find<AuthController>();
+      final token = authController.token.value;
+
+      if (token.isEmpty) {
+        Get.snackbar(
+          'Error',
+          'Please login first',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 3),
+        );
+        setState(() {
+          _isProcessing = false;
+        });
+        return;
+      }
+
+      // Call check-in API
+      final response = await _apiService.checkIn(
+        token: token,
+        qrKey: code,
+        meetingRoomId: widget.meetingRoomId,
+      );
+
+      setState(() {
+        _isProcessing = false;
+      });
+
+      // Show attractive popup with response
+      if (mounted) {
+        CheckInResponseDialog.show(
+          context,
+          response.status,
+          response.message,
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isProcessing = false;
+      });
+
+      // Show error in popup
+      if (mounted) {
+        CheckInResponseDialog.show(
+          context,
+          false,
+          'Error: ${e.toString().replaceAll('Exception: ', '')}',
+        );
+      }
+    }
+  }
+
+  Future<void> _handleManualCode() async {
+    if (_isProcessing) return; // Prevent multiple calls
+    
+    final code = _manualCodeController.text.trim();
+    if (code.isEmpty) {
+      Get.snackbar(
+        'Error',
+        'Please enter a code',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 2),
+      );
+      return;
+    }
+
+    setState(() {
+      _isProcessing = true;
+    });
+
+    _manualCodeController.clear();
+
+    try {
+      final authController = Get.find<AuthController>();
+      final token = authController.token.value;
+
+      if (token.isEmpty) {
+        Get.snackbar(
+          'Error',
+          'Please login first',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 3),
+        );
+        setState(() {
+          _isProcessing = false;
+        });
+        return;
+      }
+
+      // Call check-in API
+      final response = await _apiService.checkIn(
+        token: token,
+        qrKey: code,
+        meetingRoomId: widget.meetingRoomId,
+      );
+
+      setState(() {
+        _isProcessing = false;
+      });
+
+      // Show attractive popup with response
+      if (mounted) {
+        CheckInResponseDialog.show(
+          context,
+          response.status,
+          response.message,
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isProcessing = false;
+      });
+
+      // Show error in popup
+      if (mounted) {
+        CheckInResponseDialog.show(
+          context,
+          false,
+          'Error: ${e.toString().replaceAll('Exception: ', '')}',
+        );
+      }
+    }
+  }
+
+  Widget _buildScannerView() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Rotate the camera view to show landscape orientation
+        // Rotate 90 degrees counter-clockwise to display camera in landscape (correct orientation)
+        return Transform.rotate(
+          angle: 1.5708, // 90 degrees in radians (π/2) for proper portrait to landscape rotation
+          child: SizedBox(
+            width: constraints.maxHeight,
+            height: constraints.maxWidth,
+            child: MobileScanner(
+              controller: _scannerController!,
+              onDetect: (capture) {
+                if (_isProcessing) return; // Prevent multiple scans
+                final List<Barcode> barcodes = capture.barcodes;
+                for (final barcode in barcodes) {
+                  if (barcode.rawValue != null) {
+                    _handleQRCode(barcode.rawValue!);
+                    break;
+                  }
+                }
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildScannerPlaceholder() {
+    return Container(
+      color: Colors.black,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.qr_code_scanner,
+              size: 80,
+              color: Colors.white.withOpacity(0.5),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Tap to Start Scanning',
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.white.withOpacity(0.7),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Use front camera to scan QR code',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.white.withOpacity(0.5),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox.expand(
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Colors.black,
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+                // Camera View or Placeholder
+                if (_isScanning && _scannerController != null)
+                  _buildScannerView()
+                else
+                  _buildScannerPlaceholder(),
+                Positioned(
+                  bottom: 40,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: FloatingActionButton.extended(
+                      onPressed: _isProcessing
+                          ? null
+                          : (_isScanning ? _stopScanning : _startScanning),
+                      backgroundColor: _isScanning
+                          ? Colors.red
+                          : (_isProcessing
+                              ? Colors.grey
+                              : const Color(0xFFF37F20)),
+                      icon: Icon(_isScanning
+                          ? Icons.stop
+                          : (_isProcessing
+                              ? Icons.hourglass_empty
+                              : Icons.qr_code_scanner)),
+                      label: Text(_isScanning
+                          ? 'Stop Scanning'
+                          : (_isProcessing
+                              ? 'Processing...'
+                              : 'Start Scanning')),
+                    ),
+                  ),
+                ),
+                if (_isScanning)
+                  Positioned(
+                    top: 40,
+                    left: 20,
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.6),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Scanning QR Code',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Point camera at QR code',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+  }
+}
+
