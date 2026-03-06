@@ -80,7 +80,9 @@ class ApiService {
   // Check-in endpoint
   Future<CheckInResponse> checkIn({
     required String token,
-    required String qrKey,
+    // required String qrKey,
+    String? qrKey,           // optional
+    String? accessCode,
     required String meetingRoomId,
   }) async {
     try {
@@ -94,8 +96,17 @@ class ApiService {
         'Authorization': 'Bearer $token',
       });
 
+      // // Add form fields
+      // request.fields['qr_key'] = qrKey;
+      // request.fields['meeting_room_id'] = meetingRoomId;
+
       // Add form fields
-      request.fields['qr_key'] = qrKey;
+      if (qrKey != null) {
+        request.fields['qr_key'] = qrKey;
+      }
+      if (accessCode != null) {
+        request.fields['access_code'] = accessCode;
+      }
       request.fields['meeting_room_id'] = meetingRoomId;
 
       final streamedResponse = await request.send();
